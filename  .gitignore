@@ -1,0 +1,11 @@
+venv/
+.venv/
+riskdash/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*.csv
+*.xlsx
+*.parquet
+*.zip
