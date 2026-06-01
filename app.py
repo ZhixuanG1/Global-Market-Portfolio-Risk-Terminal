@@ -232,18 +232,39 @@ st.markdown(
     [data-testid="stHeader"],
     header[data-testid="stHeader"] {
         background: transparent;
-        height: 0;
+        height: 2.15rem;
+        pointer-events: auto;
     }
 
-    [data-testid="stToolbar"],
     [data-testid="stDecoration"],
     [data-testid="stStatusWidget"],
     #MainMenu {
         display: none;
     }
 
+    [data-testid="stToolbar"] {
+        background: transparent !important;
+        color: #ED9E59 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 9999 !important;
+    }
+
+    [data-testid="stToolbar"] button {
+        background: #241b37 !important;
+        border: 1px solid rgba(237, 158, 89, 0.34) !important;
+        color: #ED9E59 !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stToolbar"] svg {
+        color: #ED9E59 !important;
+        fill: #ED9E59 !important;
+    }
+
     .block-container {
-        padding-top: 0.25rem;
+        padding-top: 0;
         padding-left: 1.15rem;
         padding-right: 1.15rem;
         padding-bottom: 1.2rem;
@@ -253,8 +274,54 @@ st.markdown(
     [data-testid="stSidebar"] {
         background: #171529;
         border-right: 1px solid var(--line);
-        min-width: 18rem !important;
+        width: 19.5rem !important;
+        min-width: 0 !important;
         max-width: 19.5rem !important;
+    }
+
+    [data-testid="stSidebar"][aria-expanded="false"],
+    [data-testid="stSidebar"][aria-hidden="true"] {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        border-right: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main,
+    section.main {
+        width: 100% !important;
+    }
+
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"],
+    button[aria-label*="sidebar" i],
+    button[title*="sidebar" i] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 9999 !important;
+        pointer-events: auto !important;
+    }
+
+    [data-testid="collapsedControl"] button,
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stSidebarCollapsedControl"] button,
+    button[aria-label*="sidebar" i],
+    button[title*="sidebar" i] {
+        background: #241b37 !important;
+        border: 1px solid rgba(237, 158, 89, 0.42) !important;
+        color: #ED9E59 !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="collapsedControl"] svg,
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    button[aria-label*="sidebar" i] svg,
+    button[title*="sidebar" i] svg {
+        color: #ED9E59 !important;
+        fill: #ED9E59 !important;
     }
 
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
@@ -760,7 +827,7 @@ st.markdown(
         color: #E9BCB9;
         font-size: 0.82rem;
         font-weight: 740;
-        margin: 0.05rem 0 0.42rem;
+        margin: 0.7rem 0 0.42rem;
     }
 
     .workspace-button-row {
@@ -768,11 +835,37 @@ st.markdown(
         margin-bottom: 0.72rem;
     }
 
+    .app-topbar {
+        position: sticky;
+        top: 0;
+        z-index: 900;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin: 0 0 0.78rem;
+        padding: 0.62rem 0.82rem;
+        border: 1px solid rgba(237, 158, 89, 0.22);
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(27, 25, 49, 0.98), rgba(68, 23, 78, 0.96));
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+        backdrop-filter: blur(10px);
+    }
+
+    .app-topbar-title {
+        color: #fff7f0;
+        font-size: 1.02rem;
+        font-weight: 820;
+        line-height: 1.1;
+    }
+
     .terminal-credit {
-        color: rgba(233, 188, 185, 0.72);
-        font-size: 0.68rem;
-        font-weight: 650;
-        margin-top: 0.12rem;
+        color: rgba(233, 188, 185, 0.88);
+        font-size: 0.78rem;
+        font-weight: 680;
+        line-height: 1.2;
+        white-space: nowrap;
     }
 
     .terminal-credit a {
@@ -782,6 +875,18 @@ st.markdown(
 
     .terminal-credit a:hover {
         text-decoration: underline;
+    }
+
+    @media (max-width: 760px) {
+        .app-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 0.28rem;
+        }
+
+        .terminal-credit {
+            white-space: normal;
+        }
     }
 
     .workspace-button-row [data-testid="stButton"] button {
@@ -844,6 +949,18 @@ query_workspace = st.query_params.get("workspace", "Portfolio Dashboard")
 page = query_workspace if query_workspace in workspace_options else "Portfolio Dashboard"
 
 st.markdown(
+    f"""
+    <div class="app-topbar">
+        <div class="app-topbar-title">{APP_NAME}</div>
+        <div class="terminal-credit">
+            Built by Zhixuan Gao · <a href="mailto:zhixuangao716@gmail.com">zhixuangao716@gmail.com</a>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
     """
     <div class="workspace-label">Workspace</div>
     """,
@@ -862,20 +979,6 @@ for column, workspace in zip(workspace_cols, workspace_options):
             st.query_params["workspace"] = workspace
             st.rerun()
 st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown(
-    f"""
-    <div style="margin: 0.15rem 0 0.55rem 0;">
-        <div style="font-size: 0.72rem; color: #caa6ad; font-weight: 760; text-transform: uppercase; letter-spacing: 0;">
-            {APP_NAME}
-        </div>
-        <div class="terminal-credit">
-            Built by Zhixuan Gao · <a href="mailto:zhixuangao716@gmail.com">zhixuangao716@gmail.com</a>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
 if page == "Portfolio Dashboard":
     st.sidebar.header("Portfolio Inputs")
