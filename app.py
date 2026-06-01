@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 from math import erfc, log, sqrt
 from statistics import NormalDist
@@ -38,6 +39,82 @@ SECTOR_PROXY_TICKERS = {
     "Utilities": "XLU",
     "Real Estate": "XLRE",
     "Communication Services": "XLC",
+}
+PROFILE_FALLBACKS = {
+    "AAPL": {
+        "Company": "Apple Inc.",
+        "Sector": "Technology",
+        "Industry": "Consumer Electronics",
+        "Exchange": "NMS",
+        "Country": "United States",
+    },
+    "MSFT": {
+        "Company": "Microsoft Corporation",
+        "Sector": "Technology",
+        "Industry": "Software - Infrastructure",
+        "Exchange": "NMS",
+        "Country": "United States",
+    },
+    "JPM": {
+        "Company": "JPMorgan Chase & Co.",
+        "Sector": "Financial Services",
+        "Industry": "Banks - Diversified",
+        "Exchange": "NYQ",
+        "Country": "United States",
+    },
+    "TLT": {
+        "Company": "iShares 20+ Year Treasury Bond ETF",
+        "Sector": "Government Bonds",
+        "Industry": "Long Duration Treasury ETF",
+        "Exchange": "NMS",
+        "Country": "United States",
+    },
+    "SPY": {
+        "Company": "SPDR S&P 500 ETF Trust",
+        "Sector": "Broad Equity",
+        "Industry": "Large Cap Equity ETF",
+        "Exchange": "PCX",
+        "Country": "United States",
+    },
+    "QQQ": {
+        "Company": "Invesco QQQ Trust",
+        "Sector": "Broad Equity",
+        "Industry": "Nasdaq 100 ETF",
+        "Exchange": "NMS",
+        "Country": "United States",
+    },
+    "NVDA": {"Company": "NVIDIA Corporation", "Sector": "Technology", "Industry": "Semiconductors"},
+    "GOOGL": {"Company": "Alphabet Inc.", "Sector": "Communication Services", "Industry": "Internet Content & Information"},
+    "GOOG": {"Company": "Alphabet Inc.", "Sector": "Communication Services", "Industry": "Internet Content & Information"},
+    "META": {"Company": "Meta Platforms, Inc.", "Sector": "Communication Services", "Industry": "Internet Content & Information"},
+    "AMZN": {"Company": "Amazon.com, Inc.", "Sector": "Consumer Cyclical", "Industry": "Internet Retail"},
+    "TSLA": {"Company": "Tesla, Inc.", "Sector": "Consumer Cyclical", "Industry": "Auto Manufacturers"},
+    "BAC": {"Company": "Bank of America Corporation", "Sector": "Financial Services", "Industry": "Banks - Diversified"},
+    "C": {"Company": "Citigroup Inc.", "Sector": "Financial Services", "Industry": "Banks - Diversified"},
+    "GS": {"Company": "The Goldman Sachs Group, Inc.", "Sector": "Financial Services", "Industry": "Capital Markets"},
+    "MS": {"Company": "Morgan Stanley", "Sector": "Financial Services", "Industry": "Capital Markets"},
+    "BLK": {"Company": "BlackRock, Inc.", "Sector": "Financial Services", "Industry": "Asset Management"},
+    "BX": {"Company": "Blackstone Inc.", "Sector": "Financial Services", "Industry": "Asset Management"},
+    "SCHW": {"Company": "The Charles Schwab Corporation", "Sector": "Financial Services", "Industry": "Capital Markets"},
+    "UBS": {"Company": "UBS Group AG", "Sector": "Financial Services", "Industry": "Banks - Diversified"},
+    "DB": {"Company": "Deutsche Bank AG", "Sector": "Financial Services", "Industry": "Banks - Regional"},
+    "HSBC": {"Company": "HSBC Holdings plc", "Sector": "Financial Services", "Industry": "Banks - Diversified"},
+    "XLF": {"Company": "Financial Select Sector SPDR Fund", "Sector": "Financial Services", "Industry": "Sector ETF"},
+    "XLK": {"Company": "Technology Select Sector SPDR Fund", "Sector": "Technology", "Industry": "Sector ETF"},
+    "XLV": {"Company": "Health Care Select Sector SPDR Fund", "Sector": "Healthcare", "Industry": "Sector ETF"},
+    "XLY": {"Company": "Consumer Discretionary Select Sector SPDR Fund", "Sector": "Consumer Cyclical", "Industry": "Sector ETF"},
+    "XLP": {"Company": "Consumer Staples Select Sector SPDR Fund", "Sector": "Consumer Defensive", "Industry": "Sector ETF"},
+    "XLE": {"Company": "Energy Select Sector SPDR Fund", "Sector": "Energy", "Industry": "Sector ETF"},
+    "XLI": {"Company": "Industrial Select Sector SPDR Fund", "Sector": "Industrials", "Industry": "Sector ETF"},
+    "XLB": {"Company": "Materials Select Sector SPDR Fund", "Sector": "Basic Materials", "Industry": "Sector ETF"},
+    "XLU": {"Company": "Utilities Select Sector SPDR Fund", "Sector": "Utilities", "Industry": "Sector ETF"},
+    "XLRE": {"Company": "Real Estate Select Sector SPDR Fund", "Sector": "Real Estate", "Industry": "Sector ETF"},
+    "XLC": {"Company": "Communication Services Select Sector SPDR Fund", "Sector": "Communication Services", "Industry": "Sector ETF"},
+    "AGG": {"Company": "iShares Core U.S. Aggregate Bond ETF", "Sector": "Aggregate Bonds", "Industry": "Bond ETF"},
+    "BND": {"Company": "Vanguard Total Bond Market ETF", "Sector": "Aggregate Bonds", "Industry": "Bond ETF"},
+    "LQD": {"Company": "iShares iBoxx Investment Grade Corporate Bond ETF", "Sector": "Corporate Bonds", "Industry": "Bond ETF"},
+    "HYG": {"Company": "iShares iBoxx High Yield Corporate Bond ETF", "Sector": "High Yield Bonds", "Industry": "Bond ETF"},
+    "SHY": {"Company": "iShares 1-3 Year Treasury Bond ETF", "Sector": "Government Bonds", "Industry": "Short Duration Treasury ETF"},
 }
 FRED_RATE_SERIES = {
     "SOFR": "SOFR",
@@ -204,7 +281,7 @@ FIXED_INCOME_PRODUCTS = [
 ]
 
 
-st.set_page_config(page_title=APP_NAME, layout="wide")
+st.set_page_config(page_title=APP_NAME, layout="wide", initial_sidebar_state="expanded")
 st.markdown(
     """
     <style>
@@ -835,6 +912,41 @@ st.markdown(
         margin-bottom: 0.72rem;
     }
 
+    .workspace-nav-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.55rem;
+    }
+
+    .workspace-nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.35rem;
+        padding: 0.45rem 0.75rem;
+        border: 1px solid rgba(237, 158, 89, 0.2);
+        border-radius: 8px;
+        background: #241b37;
+        color: #E9BCB9 !important;
+        font-size: 0.84rem;
+        font-weight: 760;
+        text-align: center;
+        text-decoration: none !important;
+        box-shadow: none;
+    }
+
+    .workspace-nav-link:hover {
+        background: #44174E;
+        color: #ED9E59 !important;
+        border-color: #ED9E59;
+    }
+
+    .workspace-nav-link.active {
+        background: #662249;
+        color: #ED9E59 !important;
+        border-color: #ED9E59;
+    }
+
     .app-topbar {
         position: sticky;
         top: 0;
@@ -948,6 +1060,40 @@ workspace_options = ["Portfolio Dashboard", "Market Monitor", "Global Markets"]
 query_workspace = st.query_params.get("workspace", "Portfolio Dashboard")
 page = query_workspace if query_workspace in workspace_options else "Portfolio Dashboard"
 
+if st.session_state.get("_last_workspace_for_sidebar") != page:
+    st.session_state["_last_workspace_for_sidebar"] = page
+    components.html(
+        """
+        <script>
+        (function () {
+            const parentDoc = window.parent.document;
+            const isCollapsed = () => {
+                const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
+                if (!sidebar) return true;
+                const rect = sidebar.getBoundingClientRect();
+                return rect.width < 80 || sidebar.getAttribute("aria-expanded") === "false";
+            };
+            const openSidebar = () => {
+                if (!isCollapsed()) return;
+                const buttons = Array.from(parentDoc.querySelectorAll("button"));
+                const expandButton = buttons.find((button) => {
+                    const label = `${button.getAttribute("aria-label") || ""} ${button.getAttribute("title") || ""} ${button.textContent || ""}`.toLowerCase();
+                    return label.includes("expand sidebar") ||
+                        label.includes("open sidebar") ||
+                        label.includes("show sidebar") ||
+                        button.closest('[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"]');
+                });
+                if (expandButton) expandButton.click();
+            };
+            setTimeout(openSidebar, 120);
+            setTimeout(openSidebar, 520);
+            setTimeout(openSidebar, 1000);
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
 st.markdown(
     f"""
     <div class="app-topbar">
@@ -967,17 +1113,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown('<div class="workspace-button-row">', unsafe_allow_html=True)
-workspace_cols = st.columns(3, gap="small")
-for column, workspace in zip(workspace_cols, workspace_options):
-    with column:
-        if st.button(
-            workspace,
-            key=f"workspace_nav_{workspace}",
-            type="primary" if workspace == page else "secondary",
-            width="stretch",
-        ):
-            st.query_params["workspace"] = workspace
-            st.rerun()
+workspace_links = []
+for workspace in workspace_options:
+    active_class = " active" if workspace == page else ""
+    workspace_links.append(
+        f'<a class="workspace-nav-link{active_class}" target="_self" href="?workspace={quote_plus(workspace)}">{workspace}</a>'
+    )
+st.markdown(
+    f'<div class="workspace-nav-grid">{"".join(workspace_links)}</div>',
+    unsafe_allow_html=True,
+)
 st.markdown("</div>", unsafe_allow_html=True)
 
 if page == "Portfolio Dashboard":
@@ -993,6 +1138,12 @@ if page == "Portfolio Dashboard":
         "Weights",
         value="0.25, 0.25, 0.25, 0.25",
         help="Enter comma-separated weights. They can sum to 1 or 100.",
+    )
+
+    sector_overrides_input = st.sidebar.text_input(
+        "Sector overrides",
+        value="",
+        help="Optional format: TICKER:Sector, TICKER:Sector. Example: DBK.DE:Financial Services, RMS.PA:Consumer Cyclical.",
     )
 
     period = st.sidebar.selectbox(
@@ -1222,6 +1373,24 @@ def parse_weights(raw_text, expected_count):
 
     weights = weights / weights.sum()
     return weights, None
+
+
+def parse_sector_overrides(raw_text):
+    overrides = {}
+    errors = []
+    for item in raw_text.split(","):
+        cleaned = item.strip()
+        if not cleaned:
+            continue
+        if ":" not in cleaned:
+            errors.append(cleaned)
+            continue
+        ticker, sector = cleaned.split(":", 1)
+        ticker = ticker.strip().upper()
+        sector = sector.strip()
+        if ticker and sector:
+            overrides[ticker] = sector
+    return overrides, errors
 
 
 @st.cache_data(ttl=3600)
@@ -2243,12 +2412,13 @@ def performance_attribution(asset_returns, benchmark_returns, portfolio_weights)
     return table, summary
 
 
-def brinson_attribution(asset_returns, all_returns, tickers, portfolio_weights):
+def brinson_attribution(asset_returns, all_returns, tickers, portfolio_weights, sector_overrides=None):
+    sector_overrides = sector_overrides or {}
     sector_rows = []
 
     for ticker, weight in zip(tickers, portfolio_weights):
         profile = fetch_company_profile(ticker)
-        sector = profile.get("Sector", "Unclassified")
+        sector = sector_overrides.get(ticker.upper(), profile.get("Sector", "Unclassified"))
         sector_rows.append({"Ticker": ticker, "Sector": sector, "Weight": weight})
 
     holdings = pd.DataFrame(sector_rows)
@@ -3247,8 +3417,41 @@ def filter_options(dataframe, column):
     return ["All"] + values
 
 
+def infer_profile_fallback(ticker):
+    normalized_ticker = str(ticker).upper().strip()
+    fallback = PROFILE_FALLBACKS.get(normalized_ticker, {}).copy()
+
+    if fallback:
+        return fallback
+
+    if normalized_ticker.endswith((".DE", ".F")):
+        fallback["Country"] = "Germany"
+        fallback["Exchange"] = "GER"
+    elif normalized_ticker.endswith((".PA", ".AS", ".BR", ".MI", ".MC")):
+        fallback["Country"] = "Europe"
+        fallback["Exchange"] = "EU"
+    elif normalized_ticker.endswith((".L",)):
+        fallback["Country"] = "United Kingdom"
+        fallback["Exchange"] = "LSE"
+    elif normalized_ticker.endswith((".TO", ".V")):
+        fallback["Country"] = "Canada"
+        fallback["Exchange"] = "TSX"
+    elif normalized_ticker.endswith((".HK",)):
+        fallback["Country"] = "Hong Kong"
+        fallback["Exchange"] = "HKG"
+
+    bond_tokens = ("BOND", "TREASURY", "GOVT", "GILT", "BUND", "IBOND")
+    if any(token in normalized_ticker for token in bond_tokens):
+        fallback.setdefault("Sector", "Government Bonds")
+        fallback.setdefault("Industry", "Fixed Income")
+
+    return fallback
+
+
 @st.cache_data(ttl=3600)
 def fetch_company_profile(ticker):
+    normalized_ticker = str(ticker).upper().strip()
+    fallback = infer_profile_fallback(normalized_ticker)
     try:
         info = yf.Ticker(ticker).get_info()
     except Exception:
@@ -3256,12 +3459,12 @@ def fetch_company_profile(ticker):
 
     return {
         "Ticker": ticker,
-        "Company": info.get("shortName") or info.get("longName") or ticker,
-        "Sector": info.get("sector") or "Unclassified",
-        "Industry": info.get("industry") or "Unclassified",
+        "Company": info.get("shortName") or info.get("longName") or fallback.get("Company") or ticker,
+        "Sector": info.get("sector") or fallback.get("Sector") or "Unclassified",
+        "Industry": info.get("industry") or fallback.get("Industry") or "Unclassified",
         "Market Cap": info.get("marketCap", np.nan),
-        "Exchange": info.get("exchange") or "N/A",
-        "Country": info.get("country") or "N/A",
+        "Exchange": info.get("exchange") or fallback.get("Exchange") or "N/A",
+        "Country": info.get("country") or fallback.get("Country") or "N/A",
     }
 
 
@@ -4065,6 +4268,14 @@ if not tickers:
     st.warning("Enter at least one ticker.")
     st.stop()
 
+sector_overrides, sector_override_errors = parse_sector_overrides(sector_overrides_input)
+if sector_override_errors:
+    st.warning(
+        "Ignored malformed sector override entries: "
+        + ", ".join(sector_override_errors)
+        + ". Use TICKER:Sector."
+    )
+
 selected_benchmark_labels = st.session_state.get(
     "selected_benchmark_labels",
     ["S&P 500 ETF"],
@@ -4402,7 +4613,13 @@ with attribution_tab:
     with attribution_right:
         render_dark_bar_chart(attribution["Contribution to Return"], height=170, compact=True)
 
-    brinson = brinson_attribution(asset_returns, all_returns, tickers, weights)
+    brinson = brinson_attribution(
+        asset_returns,
+        all_returns,
+        tickers,
+        weights,
+        sector_overrides,
+    )
     if not brinson.empty:
         st.markdown("**Brinson Attribution (Proxy-Based)**")
         brinson_display = brinson.copy()
