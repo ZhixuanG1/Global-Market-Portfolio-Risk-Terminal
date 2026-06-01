@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
+from io import StringIO
 from math import erfc, log, sqrt
 from statistics import NormalDist
 from urllib.parse import quote_plus
@@ -1393,6 +1394,81 @@ def parse_sector_overrides(raw_text):
     return overrides, errors
 
 
+def price_history_issue(prices, ticker, min_points):
+    if ticker not in prices.columns:
+        return f"{ticker}: no price column returned by public data sources."
+
+    series = prices[ticker].dropna()
+    if series.empty:
+        return f"{ticker}: price column returned, but all observations are empty."
+    if len(series) < min_points:
+        return (
+            f"{ticker}: only {len(series)} observations available "
+            f"({series.index.min().date()} to {series.index.max().date()}); "
+            f"minimum required is {min_points}."
+        )
+    return None
+
+
+def period_start_date(selected_period):
+    end = pd.Timestamp.utcnow().normalize()
+    period_map = {
+        "6mo": pd.DateOffset(months=6),
+        "1y": pd.DateOffset(years=1),
+        "2y": pd.DateOffset(years=2),
+        "3y": pd.DateOffset(years=3),
+        "5y": pd.DateOffset(years=5),
+        "10y": pd.DateOffset(years=10),
+    }
+    return end - period_map.get(selected_period, pd.DateOffset(years=2)), end
+
+
+def stooq_symbol(ticker):
+    normalized = str(ticker).strip().lower()
+    if not normalized or normalized.startswith("^") or "=" in normalized:
+        return None
+    if "." in normalized:
+        return None
+    return f"{normalized}.us"
+
+
+@st.cache_data(ttl=3600)
+def download_stooq_daily(ticker, selected_period):
+    symbol = stooq_symbol(ticker)
+    if not symbol:
+        return pd.DataFrame(), pd.Series(dtype=float)
+
+    start, end = period_start_date(selected_period)
+    url = (
+        "https://stooq.com/q/d/l/?"
+        f"s={quote_plus(symbol)}&d1={start.strftime('%Y%m%d')}&d2={end.strftime('%Y%m%d')}&i=d"
+    )
+
+    try:
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=12) as response:
+            payload = response.read().decode("utf-8", errors="ignore")
+        fallback = pd.read_csv(StringIO(payload))
+    except Exception:
+        return pd.DataFrame(), pd.Series(dtype=float)
+
+    if fallback.empty or "Date" not in fallback.columns or "Close" not in fallback.columns:
+        return pd.DataFrame(), pd.Series(dtype=float)
+
+    fallback["Date"] = pd.to_datetime(fallback["Date"], errors="coerce")
+    fallback = fallback.dropna(subset=["Date", "Close"]).set_index("Date").sort_index()
+    if fallback.empty:
+        return pd.DataFrame(), pd.Series(dtype=float)
+
+    close = pd.to_numeric(fallback["Close"], errors="coerce").rename(ticker)
+    volume = (
+        pd.to_numeric(fallback["Volume"], errors="coerce").rename(ticker)
+        if "Volume" in fallback.columns
+        else pd.Series(dtype=float, name=ticker)
+    )
+    return close.to_frame(), volume
+
+
 @st.cache_data(ttl=3600)
 def download_prices(tickers, benchmark_tickers, selected_period, extra_tickers=None):
     extra_tickers = extra_tickers or []
@@ -1402,17 +1478,22 @@ def download_prices(tickers, benchmark_tickers, selected_period, extra_tickers=N
         else [benchmark_tickers]
     )
     all_tickers = list(dict.fromkeys(tickers + benchmark_tickers + extra_tickers))
-    raw = yf.download(
-        all_tickers,
-        period=selected_period,
-        auto_adjust=True,
-        progress=False,
-    )
+    try:
+        raw = yf.download(
+            all_tickers,
+            period=selected_period,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+            timeout=20,
+        )
+    except Exception:
+        raw = pd.DataFrame()
 
     if raw.empty:
-        return pd.DataFrame(), pd.DataFrame()
-
-    if isinstance(raw.columns, pd.MultiIndex):
+        prices = pd.DataFrame()
+        volume = pd.DataFrame()
+    elif isinstance(raw.columns, pd.MultiIndex):
         if "Close" in raw.columns.get_level_values(0):
             prices = raw["Close"]
             volume = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
@@ -1427,6 +1508,15 @@ def download_prices(tickers, benchmark_tickers, selected_period, extra_tickers=N
         prices = prices.to_frame(all_tickers[0])
     if isinstance(volume, pd.Series):
         volume = volume.to_frame(all_tickers[0])
+
+    for ticker in all_tickers:
+        if ticker in prices.columns and prices[ticker].dropna().shape[0] > 0:
+            continue
+        fallback_prices, fallback_volume = download_stooq_daily(ticker, selected_period)
+        if not fallback_prices.empty:
+            prices = prices.drop(columns=[ticker], errors="ignore").join(fallback_prices, how="outer")
+        if not fallback_volume.empty:
+            volume = volume.drop(columns=[ticker], errors="ignore").join(fallback_volume.to_frame(), how="outer")
 
     return prices.dropna(how="all"), volume.dropna(how="all")
 
@@ -4311,24 +4401,122 @@ extra_market_tickers = list(
 )
 prices, volumes = download_prices(tickers, benchmark_tickers, period, extra_market_tickers)
 
-missing_tickers = [
-    ticker for ticker in tickers + benchmark_tickers if ticker not in prices.columns
+min_history_points = 30
+original_tickers = tickers[:]
+original_benchmark_tickers = benchmark_tickers[:]
+data_quality_notes = []
+available_ticker_indices = [
+    index
+    for index, ticker in enumerate(tickers)
+    if ticker in prices.columns and prices[ticker].dropna().shape[0] >= min_history_points
 ]
-if missing_tickers:
-    st.error(f"Missing price data for: {', '.join(missing_tickers)}")
+missing_portfolio_tickers = [
+    ticker for index, ticker in enumerate(tickers) if index not in available_ticker_indices
+]
+
+if missing_portfolio_tickers:
+    data_quality_notes.append(
+        "**Portfolio price history issue**\n"
+        + "\n".join(
+            f"- {price_history_issue(prices, ticker, min_history_points)}"
+            for ticker in missing_portfolio_tickers
+        )
+        + "\n\nThese tickers are temporarily excluded and remaining weights are re-normalized."
+    )
+
+if not available_ticker_indices:
+    st.error(
+        "No portfolio ticker has enough public historical price data for risk metrics.\n\n"
+        + "\n".join(
+            f"- {price_history_issue(prices, ticker, min_history_points)}"
+            for ticker in original_tickers
+        )
+    )
     st.stop()
 
-required_columns = list(dict.fromkeys(tickers + benchmark_tickers))
-required_prices = prices[required_columns].dropna()
-if required_prices.shape[0] < 30:
-    st.error("Not enough historical price data to calculate reliable risk metrics.")
+tickers = [tickers[index] for index in available_ticker_indices]
+weights = weights[available_ticker_indices]
+weights = weights / weights.sum()
+
+portfolio_prices = prices[tickers].dropna()
+if portfolio_prices.shape[0] < min_history_points:
+    available_ranges = []
+    for ticker in tickers:
+        series = prices[ticker].dropna()
+        available_ranges.append(
+            f"- {ticker}: {len(series)} observations, {series.index.min().date()} to {series.index.max().date()}"
+        )
+    st.error(
+        "Not enough overlapping portfolio price history to calculate reliable risk metrics.\n\n"
+        f"Overlapping rows after aligning portfolio tickers: {portfolio_prices.shape[0]}.\n\n"
+        + "\n".join(available_ranges)
+    )
     st.stop()
 
-returns = required_prices.pct_change(fill_method=None).dropna()
+available_benchmark_tickers = [
+    benchmark
+    for benchmark in benchmark_tickers
+    if benchmark in prices.columns and prices[benchmark].dropna().shape[0] >= min_history_points
+]
+missing_benchmark_tickers = [
+    benchmark for benchmark in benchmark_tickers if benchmark not in available_benchmark_tickers
+]
+if missing_benchmark_tickers:
+    data_quality_notes.append(
+        "**Benchmark price history issue**\n"
+        + "\n".join(
+            f"- {price_history_issue(prices, benchmark, min_history_points)}"
+            for benchmark in missing_benchmark_tickers
+        )
+        + "\n\nUnavailable benchmarks are ignored; if no benchmark remains, the app uses Portfolio Proxy."
+    )
+
+returns = portfolio_prices.pct_change(fill_method=None).dropna()
 asset_returns = returns[tickers]
-benchmark_returns_df = returns[benchmark_tickers]
-benchmark_returns = benchmark_returns_df[primary_benchmark]
 portfolio_returns = asset_returns.dot(weights)
+
+benchmark_returns_df = pd.DataFrame(index=portfolio_returns.index)
+for benchmark in available_benchmark_tickers:
+    benchmark_returns_df[benchmark] = (
+        prices[benchmark]
+        .reindex(portfolio_prices.index)
+        .ffill()
+        .pct_change(fill_method=None)
+    )
+benchmark_returns_df = benchmark_returns_df.dropna(how="all")
+
+if not benchmark_returns_df.empty:
+    benchmark_tickers = benchmark_returns_df.columns.tolist()
+    primary_benchmark = benchmark_tickers[0]
+    aligned_index = portfolio_returns.index.intersection(
+        benchmark_returns_df[primary_benchmark].dropna().index
+    )
+    if len(aligned_index) >= min_history_points:
+        portfolio_returns = portfolio_returns.loc[aligned_index]
+        asset_returns = asset_returns.loc[aligned_index]
+        benchmark_returns_df = benchmark_returns_df.loc[aligned_index]
+        benchmark_returns = benchmark_returns_df[primary_benchmark]
+    else:
+        data_quality_notes.append(
+            "**Benchmark alignment issue**\n"
+            f"- {primary_benchmark}: only {len(aligned_index)} overlapping return dates with the portfolio. "
+            "Using Portfolio Proxy for beta, active return, and benchmark comparison."
+        )
+        primary_benchmark = "Portfolio Proxy"
+        benchmark_tickers = [primary_benchmark]
+        benchmark_returns = portfolio_returns.copy()
+        benchmark_returns.name = primary_benchmark
+        benchmark_returns_df = benchmark_returns.to_frame()
+else:
+    data_quality_notes.append(
+        "**Benchmark fallback**\n"
+        "- No selected benchmark has enough public price history. Using Portfolio Proxy for benchmark-dependent metrics."
+    )
+    primary_benchmark = "Portfolio Proxy"
+    benchmark_tickers = [primary_benchmark]
+    benchmark_returns = portfolio_returns.copy()
+    benchmark_returns.name = primary_benchmark
+    benchmark_returns_df = benchmark_returns.to_frame()
 
 all_returns = prices.pct_change(fill_method=None).dropna(how="all")
 factor_returns = build_factor_returns(all_returns)
@@ -4366,9 +4554,16 @@ summary_limits = risk_limit_table(metrics)
 summary_breaches = int((summary_limits["Status"] == "Breach").sum())
 summary_status = "PASS" if summary_breaches == 0 else "REVIEW"
 status_class = "status-pass" if summary_status == "PASS" else "status-review"
-date_start = required_prices.index.min().date()
-date_end = required_prices.index.max().date()
+date_start = portfolio_prices.index.min().date()
+date_end = portfolio_prices.index.max().date()
 portfolio_label = " / ".join(tickers)
+
+if data_quality_notes:
+    st.warning(
+        "Data availability notice for the public deployment\n\n"
+        + "\n\n".join(data_quality_notes)
+        + "\n\nLocal runs can differ because Yahoo Finance and Stooq may rate-limit or block hosted environments differently."
+    )
 
 st.markdown(
     f"""
